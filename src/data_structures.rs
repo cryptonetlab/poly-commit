@@ -1,5 +1,5 @@
-use crate::{Polynomial, Rc, String, Vec};
-use ark_ff::{Field, PrimeField, ToConstraintField};
+use crate::{Polynomial, PolynomialCommitment, Rc, String, Vec};
+use ark_ff::{Field, ToConstraintField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, SerializationError};
 use ark_std::rand::RngCore;
 use ark_std::{
@@ -66,10 +66,7 @@ pub trait PCCommitment:
     fn has_degree_bound(&self) -> bool;
 
     /// Size in bytes
-    #[deprecated(since = "0.4.0", note = "Please use `.serialized_size()` instead.")]
-    fn size_in_bytes(&self) -> usize {
-        self.serialized_size()
-    }
+    fn size_in_bytes(&self) -> usize;
 }
 
 /// Defines the minimal interface of prepared commitments for any polynomial
@@ -102,17 +99,14 @@ pub trait PCRandomness: Clone + CanonicalSerialize + CanonicalDeserialize {
 /// commitment scheme.
 pub trait PCProof: Clone + ark_ff::ToBytes + CanonicalSerialize + CanonicalDeserialize {
     /// Size in bytes
-    #[deprecated(since = "0.4.0", note = "Please use `.serialized_size()` instead.")]
-    fn size_in_bytes(&self) -> usize {
-        self.serialized_size()
-    }
+    fn size_in_bytes(&self) -> usize;
 }
 
 /// A proof of satisfaction of linear combinations.
 #[derive(Clone, CanonicalSerialize, CanonicalDeserialize)]
-pub struct BatchLCProof<F: PrimeField, T: Clone + CanonicalSerialize + CanonicalDeserialize> {
+pub struct BatchLCProof<F: Field, P: Polynomial<F>, PC: PolynomialCommitment<F, P>> {
     /// Evaluation proof.
-    pub proof: T,
+    pub proof: PC::BatchProof,
     /// Evaluations required to verify the proof.
     pub evals: Option<Vec<F>>,
 }

@@ -193,7 +193,7 @@ impl<E: PairingEngine> PCPreparedVerifierKey<VerifierKey<E>> for PreparedVerifie
     fn prepare(vk: &VerifierKey<E>) -> Self {
         let prepared_vk = kzg10::PreparedVerifierKey::<E>::prepare(&vk.vk);
 
-        let supported_bits = E::Fr::MODULUS_BIT_SIZE as usize;
+        let supported_bits = E::Fr::size_in_bits();
 
         let prepared_degree_bounds_and_shift_powers: Option<Vec<(usize, Vec<E::G1Affine>)>> =
             if vk.degree_bounds_and_shift_powers.is_some() {
@@ -289,6 +289,10 @@ impl<E: PairingEngine> PCCommitment for Commitment<E> {
 
     fn has_degree_bound(&self) -> bool {
         self.shifted_comm.is_some()
+    }
+
+    fn size_in_bytes(&self) -> usize {
+        self.comm.size_in_bytes() + self.shifted_comm.as_ref().map_or(0, |c| c.size_in_bytes())
     }
 }
 

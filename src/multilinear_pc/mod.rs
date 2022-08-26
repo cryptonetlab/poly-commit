@@ -1,7 +1,8 @@
+use super::timer::Timer;
 use crate::multilinear_pc::data_structures::{
     Commitment, CommitterKey, Proof, UniversalParams, VerifierKey,
 };
-use ark_ec::msm::{FixedBase, VariableBase};
+use ark_ec::msm::{FixedBaseMSM, VariableBaseMSM};
 use ark_ec::{AffineCurve, PairingEngine, ProjectiveCurve};
 use ark_ff::{Field, PrimeField};
 use ark_ff::{One, Zero};
@@ -12,7 +13,9 @@ use ark_std::marker::PhantomData;
 use ark_std::rand::RngCore;
 use ark_std::vec::Vec;
 use ark_std::UniformRand;
-
+use std::thread;
+// use rayon::iter::ParallelIterator;
+// use rayon::prelude::{IndexedParallelIterator, IntoParallelIterator};
 /// data structures used by multilinear extension commitment scheme
 pub mod data_structures;
 
@@ -32,7 +35,7 @@ impl<E: PairingEngine> MultilinearPC<E> {
         let mut powers_of_g = Vec::new();
         let mut powers_of_h = Vec::new();
         let t: Vec<_> = (0..num_vars).map(|_| E::Fr::rand(rng)).collect();
-        let scalar_bits = E::Fr::MODULUS_BIT_SIZE as usize;
+        let scalar_bits = E::Fr::size_in_bits();
 
         let mut eq: LinkedList<DenseMultilinearExtension<E::Fr>> =
             LinkedList::from_iter(eq_extension(&t).into_iter());
@@ -59,22 +62,16 @@ impl<E: PairingEngine> MultilinearPC<E> {
             pp_powers.extend(pp_k_powers);
             total_scalars += 1 << (num_vars - i);
         }
-        let window_size = FixedBase::get_mul_window_size(total_scalars);
-        let g_table = FixedBase::get_window_table(scalar_bits, window_size, g.into_projective());
-        let h_table = FixedBase::get_window_table(scalar_bits, window_size, h.into_projective());
+        let window_size = FixedBaseMSM::get_mul_window_size(total_scalars);
+        let g_table = FixedBaseMSM::get_window_table(scalar_bits, window_size, g.into_projective());
+        let h_table = FixedBaseMSM::get_window_table(scalar_bits, window_size, h.into_projective());
 
-        let pp_g = E::G1Projective::batch_normalization_into_affine(&FixedBase::msm(
-            scalar_bits,
-            window_size,
-            &g_table,
-            &pp_powers,
-        ));
-        let pp_h = E::G2Projective::batch_normalization_into_affine(&FixedBase::msm(
-            scalar_bits,
-            window_size,
-            &h_table,
-            &pp_powers,
-        ));
+        let pp_g = E::G1Projective::batch_normalization_into_affine(
+            &FixedBaseMSM::multi_scalar_mul(scalar_bits, window_size, &g_table, &pp_powers),
+        );
+        let pp_h = E::G2Projective::batch_normalization_into_affine(
+            &FixedBaseMSM::multi_scalar_mul(scalar_bits, window_size, &h_table, &pp_powers),
+        );
         let mut start = 0;
         for i in 0..num_vars {
             let size = 1 << (num_vars - i);
@@ -88,10 +85,10 @@ impl<E: PairingEngine> MultilinearPC<E> {
         // uncomment to measure the time for calculating vp
         // let vp_generation_timer = start_timer!(|| "VP generation");
         let g_mask = {
-            let window_size = FixedBase::get_mul_window_size(num_vars);
+            let window_size = FixedBaseMSM::get_mul_window_size(num_vars);
             let g_table =
-                FixedBase::get_window_table(scalar_bits, window_size, g.into_projective());
-            E::G1Projective::batch_normalization_into_affine(&FixedBase::msm(
+                FixedBaseMSM::get_window_table(scalar_bits, window_size, g.into_projective());
+            E::G1Projective::batch_normalization_into_affine(&FixedBaseMSM::multi_scalar_mul(
                 scalar_bits,
                 window_size,
                 &g_table,
@@ -144,9 +141,12 @@ impl<E: PairingEngine> MultilinearPC<E> {
         let scalars: Vec<_> = polynomial
             .to_evaluations()
             .into_iter()
-            .map(|x| x.into_bigint())
+            .map(|x| x.into_repr())
             .collect();
-        let g_product = VariableBase::msm(&ck.powers_of_g[0], scalars.as_slice()).into_affine();
+        let msm_commit = Timer::new("msmcommit");
+        let g_product =
+            VariableBaseMSM::multi_scalar_mul(&ck.powers_of_g[0], scalars.as_slice()).into_affine();
+        msm_commit.stop();
         Commitment { nv, g_product }
     }
 
@@ -156,6 +156,7 @@ impl<E: PairingEngine> MultilinearPC<E> {
         polynomial: &impl MultilinearExtension<E::Fr>,
         point: &[E::Fr],
     ) -> Proof<E> {
+        // println!("I'm heree");
         assert_eq!(polynomial.num_vars(), ck.nv, "Invalid size of polynomial");
         let nv = polynomial.num_vars();
         let mut r: Vec<Vec<E::Fr>> = (0..nv + 1).map(|_| Vec::new()).collect();
@@ -163,8 +164,13 @@ impl<E: PairingEngine> MultilinearPC<E> {
 
         r[nv] = polynomial.to_evaluations();
 
-        let mut proofs = Vec::new();
-        for i in 0..nv {
+        // let proofs = Vec::with_capacity(nv);
+        // let mut s: Vec<Vec<_>> = Vec::new();
+        let mut thread_handles = vec![];
+        let proofs: Vec<_> = vec![E::G2Affine::zero(); nv];
+
+        let mut i = 0;
+        for mut p in proofs {
             let k = nv - i;
             let point_at_k = point[i];
             q[k] = (0..(1 << (k - 1))).map(|_| E::Fr::zero()).collect();
@@ -175,14 +181,34 @@ impl<E: PairingEngine> MultilinearPC<E> {
                     + &(r[k][(b << 1) + 1] * &point_at_k);
             }
             let scalars: Vec<_> = (0..(1 << k))
-                .map(|x| q[k][x >> 1].into_bigint()) // fine
+                .map(|x| q[k][x >> 1].into_repr()) // fine
                 .collect();
+            let ph = ck.powers_of_h[i].clone();
+            thread_handles.push(thread::spawn(move || {
+                p = VariableBaseMSM::multi_scalar_mul(&ph, &scalars).into_affine();
+                p
+            }));
 
-            let pi_h = VariableBase::msm(&ck.powers_of_h[i], &scalars).into_affine(); // no need to move outside and partition
-            proofs.push(pi_h);
+            // s.push(scalars);
+            i = i + 1;
+
+            // let pi_h =
+            //     VariableBaseMSM::multi_scalar_mul(&ck.powers_of_h[i], &scalars).into_affine(); // no need to move outside and partitionxx
+            // proofs.push(pi_h);
         }
 
-        Proof { proofs }
+        let proofs = thread_handles
+            .into_iter()
+            .map(|h| h.join().unwrap())
+            .collect();
+
+        // let res = s
+        //     .into_par_iter()
+        //     .zip(ck.powers_of_h.clone().into_par_iter())
+        //     .map(|(si, hi)| VariableBaseMSM::multi_scalar_mul(&hi, &si).into_affine())
+        //     .collect::<Vec<_>>();
+        // print!("{:?}", res);
+        Proof { proofs: proofs }
     }
 
     /// Verifies that `value` is the evaluation at `x` of the polynomial
@@ -198,12 +224,15 @@ impl<E: PairingEngine> MultilinearPC<E> {
             commitment.g_product.into_projective() - &vk.g.mul(value),
             vk.h,
         );
+        // println!("left is {:?}", left);
 
-        let scalar_size = E::Fr::MODULUS_BIT_SIZE as usize;
-        let window_size = FixedBase::get_mul_window_size(vk.nv);
+        let scalar_size = E::Fr::size_in_bits();
+        let window_size = FixedBaseMSM::get_mul_window_size(vk.nv);
 
-        let g_table = FixedBase::get_window_table(scalar_size, window_size, vk.g.into_projective());
-        let g_mul: Vec<E::G1Projective> = FixedBase::msm(scalar_size, window_size, &g_table, point);
+        let g_table =
+            FixedBaseMSM::get_window_table(scalar_size, window_size, vk.g.into_projective());
+        let g_mul: Vec<E::G1Projective> =
+            FixedBaseMSM::multi_scalar_mul(scalar_size, window_size, &g_table, point);
 
         let pairing_lefts: Vec<_> = (0..vk.nv)
             .map(|i| vk.g_mask_random[i].into_projective() - &g_mul[i])
@@ -226,6 +255,8 @@ impl<E: PairingEngine> MultilinearPC<E> {
             .zip(pairing_rights.into_iter())
             .collect();
         let right = E::product_of_pairings(pairings.iter());
+        // println!("right is {:?}", right);
+
         left == right
     }
 }

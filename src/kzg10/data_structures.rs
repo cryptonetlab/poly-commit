@@ -11,12 +11,7 @@ use ark_std::{
 
 /// `UniversalParams` are the universal parameters for the KZG10 scheme.
 #[derive(Derivative)]
-#[derivative(
-    Clone(bound = ""),
-    Debug(bound = ""),
-    PartialEq(bound = ""),
-    Eq(bound = "")
-)]
+#[derivative(Clone(bound = ""), Debug(bound = ""))]
 pub struct UniversalParams<E: PairingEngine> {
     /// Group elements of the form `{ \beta^i G }`, where `i` ranges from 0 to `degree`.
     pub powers_of_g: Vec<E::G1Affine>,
@@ -29,10 +24,10 @@ pub struct UniversalParams<E: PairingEngine> {
     /// Group elements of the form `{ \beta^i G2 }`, where `i` ranges from `0` to `-degree`.
     pub neg_powers_of_h: BTreeMap<usize, E::G2Affine>,
     /// The generator of G2, prepared for use in pairings.
-    #[derivative(Debug = "ignore", PartialEq = "ignore")]
+    #[derivative(Debug = "ignore")]
     pub prepared_h: E::G2Prepared,
     /// \beta times the above generator of G2, prepared for use in pairings.
-    #[derivative(Debug = "ignore", PartialEq = "ignore")]
+    #[derivative(Debug = "ignore")]
     pub prepared_beta_h: E::G2Prepared,
 }
 
@@ -158,8 +153,7 @@ impl<E: PairingEngine> CanonicalDeserialize for UniversalParams<E> {
     Default(bound = ""),
     Hash(bound = ""),
     Clone(bound = ""),
-    Debug(bound = ""),
-    PartialEq
+    Debug(bound = "")
 )]
 pub struct Powers<'a, E: PairingEngine> {
     /// Group elements of the form `β^i G`, for different values of `i`.
@@ -175,64 +169,9 @@ impl<E: PairingEngine> Powers<'_, E> {
     }
 }
 
-impl<'a, E: PairingEngine> CanonicalSerialize for Powers<'a, E> {
-    fn serialize<W: Write>(&self, mut writer: W) -> Result<(), SerializationError> {
-        self.powers_of_g.serialize(&mut writer)?;
-        self.powers_of_gamma_g.serialize(&mut writer)
-    }
-
-    fn serialized_size(&self) -> usize {
-        self.powers_of_g.serialized_size() + self.powers_of_gamma_g.serialized_size()
-    }
-
-    fn serialize_unchecked<W: Write>(&self, mut writer: W) -> Result<(), SerializationError> {
-        self.powers_of_g.serialize_unchecked(&mut writer)?;
-        self.powers_of_gamma_g.serialize_unchecked(&mut writer)
-    }
-
-    fn serialize_uncompressed<W: Write>(&self, mut writer: W) -> Result<(), SerializationError> {
-        self.powers_of_g.serialize_uncompressed(&mut writer)?;
-        self.powers_of_gamma_g.serialize_uncompressed(&mut writer)
-    }
-}
-
-impl<'a, E: PairingEngine> CanonicalDeserialize for Powers<'a, E> {
-    fn deserialize<R: Read>(mut reader: R) -> Result<Self, SerializationError> {
-        let powers_of_g = Vec::<E::G1Affine>::deserialize(&mut reader)?;
-        let powers_of_gamma_g = Vec::<E::G1Affine>::deserialize(&mut reader)?;
-        Ok(Self {
-            powers_of_g: Cow::Owned(powers_of_g),
-            powers_of_gamma_g: Cow::Owned(powers_of_gamma_g),
-        })
-    }
-
-    fn deserialize_unchecked<R: Read>(mut reader: R) -> Result<Self, SerializationError> {
-        let powers_of_g = Vec::<E::G1Affine>::deserialize_unchecked(&mut reader)?;
-        let powers_of_gamma_g = Vec::<E::G1Affine>::deserialize_unchecked(&mut reader)?;
-        Ok(Self {
-            powers_of_g: Cow::Owned(powers_of_g),
-            powers_of_gamma_g: Cow::Owned(powers_of_gamma_g),
-        })
-    }
-
-    fn deserialize_uncompressed<R: Read>(mut reader: R) -> Result<Self, SerializationError> {
-        let powers_of_g = Vec::<E::G1Affine>::deserialize_uncompressed(&mut reader)?;
-        let powers_of_gamma_g = Vec::<E::G1Affine>::deserialize_uncompressed(&mut reader)?;
-        Ok(Self {
-            powers_of_g: Cow::Owned(powers_of_g),
-            powers_of_gamma_g: Cow::Owned(powers_of_gamma_g),
-        })
-    }
-}
 /// `VerifierKey` is used to check evaluation proofs for a given commitment.
 #[derive(Derivative)]
-#[derivative(
-    Default(bound = ""),
-    Clone(bound = ""),
-    Debug(bound = ""),
-    PartialEq(bound = ""),
-    Eq(bound = "")
-)]
+#[derivative(Default(bound = ""), Clone(bound = ""), Debug(bound = ""))]
 pub struct VerifierKey<E: PairingEngine> {
     /// The generator of G1.
     pub g: E::G1Affine,
@@ -243,10 +182,10 @@ pub struct VerifierKey<E: PairingEngine> {
     /// \beta times the above generator of G2.
     pub beta_h: E::G2Affine,
     /// The generator of G2, prepared for use in pairings.
-    #[derivative(Debug = "ignore", PartialEq = "ignore")]
+    #[derivative(Debug = "ignore")]
     pub prepared_h: E::G2Prepared,
     /// \beta times the above generator of G2, prepared for use in pairings.
-    #[derivative(Debug = "ignore", PartialEq = "ignore")]
+    #[derivative(Debug = "ignore")]
     pub prepared_beta_h: E::G2Prepared,
 }
 
@@ -391,7 +330,7 @@ pub struct PreparedVerifierKey<E: PairingEngine> {
 impl<E: PairingEngine> PreparedVerifierKey<E> {
     /// prepare `PreparedVerifierKey` from `VerifierKey`
     pub fn prepare(vk: &VerifierKey<E>) -> Self {
-        let supported_bits = E::Fr::MODULUS_BIT_SIZE as usize;
+        let supported_bits = E::Fr::size_in_bits();
 
         let mut prepared_g = Vec::<E::G1Affine>::new();
         let mut g = E::G1Projective::from(vk.g.clone());
@@ -440,6 +379,10 @@ impl<E: PairingEngine> PCCommitment for Commitment<E> {
     fn has_degree_bound(&self) -> bool {
         false
     }
+
+    fn size_in_bytes(&self) -> usize {
+        ark_ff::to_bytes![E::G1Affine::zero()].unwrap().len() / 2
+    }
 }
 
 impl<E: PairingEngine> ToConstraintField<<E::Fq as Field>::BasePrimeField> for Commitment<E>
@@ -454,7 +397,7 @@ where
 impl<'a, E: PairingEngine> AddAssign<(E::Fr, &'a Commitment<E>)> for Commitment<E> {
     #[inline]
     fn add_assign(&mut self, (f, other): (E::Fr, &'a Commitment<E>)) {
-        let mut other = other.0.mul(f.into_bigint());
+        let mut other = other.0.mul(f.into_repr());
         other.add_assign_mixed(&self.0);
         self.0 = other.into();
     }
@@ -481,7 +424,7 @@ impl<E: PairingEngine> PreparedCommitment<E> {
         let mut prepared_comm = Vec::<E::G1Affine>::new();
         let mut cur = E::G1Projective::from(comm.0.clone());
 
-        let supported_bits = E::Fr::MODULUS_BIT_SIZE as usize;
+        let supported_bits = E::Fr::size_in_bits();
 
         for _ in 0..supported_bits {
             prepared_comm.push(cur.clone().into());
@@ -593,7 +536,16 @@ pub struct Proof<E: PairingEngine> {
     pub random_v: Option<E::Fr>,
 }
 
-impl<E: PairingEngine> PCProof for Proof<E> {}
+impl<E: PairingEngine> PCProof for Proof<E> {
+    fn size_in_bytes(&self) -> usize {
+        let hiding_size = if self.random_v.is_some() {
+            ark_ff::to_bytes![E::Fr::zero()].unwrap().len()
+        } else {
+            0
+        };
+        ark_ff::to_bytes![E::G1Affine::zero()].unwrap().len() / 2 + hiding_size
+    }
+}
 
 impl<E: PairingEngine> ToBytes for Proof<E> {
     #[inline]

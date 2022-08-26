@@ -62,7 +62,7 @@ pub struct Commitment<E: PairingEngine> {
     pub g_product: E::G1Affine,
 }
 
-#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug, PartialEq, Eq)]
 /// proof of opening
 pub struct Proof<E: PairingEngine> {
     /// Evaluation of quotients
