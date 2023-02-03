@@ -23,6 +23,8 @@ pub struct UniversalParams<E: PairingEngine> {
     pub h: E::G2Affine,
     /// g^randomness
     pub g_mask: Vec<E::G1Affine>,
+    /// h^randomness
+    pub h_mask: Vec<E::G2Affine>,
 }
 
 /// Public Parameter used by prover
@@ -51,10 +53,12 @@ pub struct VerifierKey<E: PairingEngine> {
     pub h: E::G2Affine,
     /// g^t1, g^t2, ...
     pub g_mask_random: Vec<E::G1Affine>,
+    /// h^t1, h^t2,...
+    pub h_mask_random: Vec<E::G2Affine>,
 }
 
 #[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
-/// commitment
+/// PST commitment on the G1 group
 pub struct Commitment<E: PairingEngine> {
     /// number of variables
     pub nv: usize,
@@ -62,9 +66,25 @@ pub struct Commitment<E: PairingEngine> {
     pub g_product: E::G1Affine,
 }
 
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug)]
+/// PST Commitment on the G2 group
+pub struct Commitment_G2<E: PairingEngine> {
+    /// number of variables
+    pub nv: usize,
+    /// product of g as described by the vRAM paper
+    pub h_product: E::G2Affine,
+}
+
 #[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug, PartialEq, Eq)]
 /// proof of opening
 pub struct Proof<E: PairingEngine> {
     /// Evaluation of quotients
     pub proofs: Vec<E::G2Affine>,
+}
+
+#[derive(CanonicalSerialize, CanonicalDeserialize, Clone, Debug, PartialEq, Eq)]
+/// PST Proof of opening on G1 (so commitment is on G2)
+pub struct Proof_G1<E: PairingEngine> {
+    /// Evaluation of quotients
+    pub proofs: Vec<E::G1Affine>,
 }
