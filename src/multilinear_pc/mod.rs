@@ -157,7 +157,7 @@ impl<E: PairingEngine> MultilinearPC<E> {
         let nv = polynomial.num_vars();
         let scalars: Vec<_> = polynomial
             .to_evaluations()
-            .into_par_iter()
+            .into_iter()
             .map(|x| x.into_repr())
             .collect();
         let g_product =
@@ -206,11 +206,11 @@ impl<E: PairingEngine> MultilinearPC<E> {
             let k = nv - i;
             let point_at_k = point[i];
             q[k] = (0..(1 << (k - 1)))
-                .into_par_iter()
+                .into_iter()
                 .map(|_| E::Fr::zero())
                 .collect();
             r[k - 1] = (0..(1 << (k - 1)))
-                .into_par_iter()
+                .into_iter()
                 .map(|_| E::Fr::zero())
                 .collect();
             for b in 0..(1 << (k - 1)) {
@@ -219,7 +219,7 @@ impl<E: PairingEngine> MultilinearPC<E> {
                     + &(r[k][(b << 1) + 1] * &point_at_k);
             }
             let scalars: Vec<_> = (0..(1 << k))
-                .into_par_iter()
+                .into_iter()
                 .map(|x| q[k][x >> 1].into_repr()) // fine
                 .collect();
             let ph = ck.powers_of_h[i].clone();
@@ -237,13 +237,13 @@ impl<E: PairingEngine> MultilinearPC<E> {
         }
 
         let proofs = thread_handles
-            .into_par_iter()
+            .into_iter()
             .map(|h| h.join().unwrap())
             .collect();
 
         // let res = s
-        //     .into_par_iter()
-        //     .zip(ck.powers_of_h.clone().into_par_iter())
+        //     .into_iter()
+        //     .zip(ck.powers_of_h.clone().into_iter())
         //     .map(|(si, hi)| VariableBaseMSM::multi_scalar_mul(&hi, &si).into_affine())
         //     .collect::<Vec<_>>();
         // print!("{:?}", res);
@@ -370,13 +370,13 @@ impl<E: PairingEngine> MultilinearPC<E> {
             FixedBaseMSM::multi_scalar_mul(scalar_size, window_size, &g_table, point);
 
         let pairing_lefts: Vec<_> = (0..vk.nv)
-            .into_par_iter()
+            .into_iter()
             .map(|i| vk.g_mask_random[i].into_projective() - &g_mul[i])
             .collect();
         let pairing_lefts: Vec<E::G1Affine> =
             E::G1Projective::batch_normalization_into_affine(&pairing_lefts);
         let pairing_lefts: Vec<E::G1Prepared> = pairing_lefts
-            .into_par_iter()
+            .into_iter()
             .map(|x| E::G1Prepared::from(x))
             .collect();
 
@@ -387,8 +387,8 @@ impl<E: PairingEngine> MultilinearPC<E> {
             .collect();
 
         let pairings: Vec<_> = pairing_lefts
-            .into_par_iter()
-            .zip(pairing_rights.into_par_iter())
+            .into_iter()
+            .zip(pairing_rights.into_iter())
             .collect();
         let right = E::product_of_pairings(pairings.iter());
         // println!("right is {:?}", right);
