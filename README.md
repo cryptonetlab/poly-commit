@@ -1,3 +1,5 @@
+**Archived Repository**: Archived in favor of a native [fork](https://github.com/cryptonetlab/ark-polycommit) of the original repo. 
+
 <h1 align="center">Polynomial Commitments</h1>
 
 <p align="center">
